@@ -10,8 +10,10 @@
 #include <util/delay.h>
 #include <stdio.h>
 
-char Receive_buf[256], Transmite_buf[256];								// Buferul de receptie UART software si transmitere
-uint8_t Receive_W = 0, Receive_R = 0, Receive_C = 0;						// variabilele contoare pentru masivul de receptie
+volatile char Receive_buf[256];
+char Transmite_buf[256];								
+volatile uint8_t Receive_W = 0, Receive_C = 0;						
+uint8_t Receive_R = 0, Transmite_T = 0;
 
 /************************* Nu utilizez, voi folosi UART_hardware receptie prin intrerupere *************************/
 unsigned char USART_receive_hardware(void)
@@ -359,10 +361,22 @@ int main(void)
 			sprintf(Transmite_buf, "Hello\n");
 			USART_putstring_hardware(Transmite_buf);
 			PORTB^=(1<<PB7);
+			while(Receive_C>0)
+				{
+					Transmite_buf[Transmite_T]=Receive_buf[Receive_R];
+					Receive_R++;
+					Receive_C--;
+					Transmite_T++;
+				}
+			Transmite_buf[Transmite_T]=0x00;
+			USART_putstring_hardware(Transmite_buf);
+			Transmite_T=0;
 		}
 }
 
 ISR(USART0_RX_vect)
 {
-USART_send_hardware(UDR0);
+Receive_buf[Receive_W] = UDR0;	
+Receive_W++;							// pregatirea adresei pentru urmatorul byte ce va veni in port
+Receive_C++;
 }
