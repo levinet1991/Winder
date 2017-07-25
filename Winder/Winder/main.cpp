@@ -8,10 +8,41 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+#include <stdio.h>
+
+char Receive_buf[256], Transmite_buf[256];								// Buferul de receptie UART software si transmitere
+uint8_t Receive_W = 0, Receive_R = 0, Receive_C = 0;						// variabilele contoare pentru masivul de receptie
+
+/************************* Nu utilizez, voi folosi UART_hardware receptie prin intrerupere *************************/
+unsigned char USART_receive_hardware(void)
+{
+	while(!(UCSR0A & (1<<RXC0)));
+	return UDR0;
+}
+
+
+/************************* Transmiterea unui byte UART_hardware *************************/
+void USART_send_hardware(unsigned char data)
+{
+	while(!(UCSR0A & (1<<UDRE0)));
+	UDR0 = data;
+}
+
+
+/************************* Transmiterea unui sir de caractere UART_hardware *************************/
+void USART_putstring_hardware(char* StringPtr)
+{
+	while(*StringPtr != 0x00)
+	{
+		USART_send_hardware(*StringPtr);
+		StringPtr++;
+	}
+}
 
 int main(void)
 {
     /* Replace with your application code */
+	
 	// Input/Output Ports initialization
 	// Port A initialization
 	// Function: Bit7=In Bit6=In Bit5=In Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In
@@ -271,6 +302,7 @@ int main(void)
 	PCMSK2=(0<<PCINT23) | (0<<PCINT22) | (0<<PCINT21) | (0<<PCINT20) | (0<<PCINT19) | (0<<PCINT18) | (0<<PCINT17) | (0<<PCINT16);
 	PCICR=(0<<PCIE2) | (0<<PCIE1) | (0<<PCIE0);
 
+	// Setarea UART la 16MHZ
 	// USART0 initialization
 	// Communication Parameters: 8 Data, 1 Stop, No Parity
 	// USART0 Receiver: On
@@ -278,7 +310,7 @@ int main(void)
 	// USART0 Mode: Asynchronous
 	// USART0 Baud Rate: 9600
 	UCSR0A=(0<<RXC0) | (0<<TXC0) | (0<<UDRE0) | (0<<FE0) | (0<<DOR0) | (0<<UPE0) | (0<<U2X0) | (0<<MPCM0);
-	UCSR0B=(1<<RXCIE0) | (0<<TXCIE0) | (0<<UDRIE0) | (1<<RXEN0) | (1<<TXEN0) | (0<<UCSZ02) | (0<<RXB80) | (0<<TXB80);
+	UCSR0B=(0<<RXCIE0) | (0<<TXCIE0) | (0<<UDRIE0) | (1<<RXEN0) | (1<<TXEN0) | (0<<UCSZ02) | (0<<RXB80) | (0<<TXB80);
 	UCSR0C=(0<<UMSEL01) | (0<<UMSEL00) | (0<<UPM01) | (0<<UPM00) | (0<<USBS0) | (1<<UCSZ01) | (1<<UCSZ00) | (0<<UCPOL0);
 	UBRR0H=0x00;
 	UBRR0L=0x67;
@@ -318,10 +350,17 @@ int main(void)
 	// TWI initialization
 	// TWI disabled
 	TWCR=(0<<TWEA) | (0<<TWSTA) | (0<<TWSTO) | (0<<TWEN) | (0<<TWIE);
+	
 	sei();
 	
     while (1) 
-    {
-    }
+		{
+			_delay_ms(1000);
+			PORTB^=(1<<PB7);
+		}
 }
 
+ISR(USART0_RX_vect)
+{
+
+}
