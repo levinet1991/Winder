@@ -9,6 +9,25 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdio.h>
+#include <avr/eeprom.h>
+
+uint8_t V1 EEMEM;
+uint8_t V2 EEMEM;
+uint8_t V3 EEMEM;
+uint8_t V4 EEMEM;
+uint8_t V5 EEMEM;
+uint8_t V6 EEMEM;
+uint8_t V7 EEMEM;
+uint8_t V8 EEMEM;
+uint8_t V9 EEMEM;
+uint8_t V10 EEMEM;
+uint8_t V11 EEMEM;
+uint8_t V12 EEMEM;
+uint8_t V13 EEMEM;
+uint8_t V14 EEMEM;
+uint8_t V15 EEMEM;
+
+uint8_t date=0;
 
 volatile char Receive_buf[256];
 char Transmite_buf[256];								
@@ -44,7 +63,7 @@ void USART_putstring_hardware(char* StringPtr)
 int main(void)
 {
     /* Replace with your application code */
-	
+	date=eeprom_read_byte(&V1);
 	// Input/Output Ports initialization
 	// Port A initialization
 	// Function: Bit7=In Bit6=In Bit5=In Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In
@@ -359,6 +378,7 @@ int main(void)
 		{
 			_delay_ms(1000);
 			sprintf(Transmite_buf, "Hello\n");
+			USART_send_hardware(date);
 			USART_putstring_hardware(Transmite_buf);
 			PORTB^=(1<<PB7);
 			while(Receive_C>0)
