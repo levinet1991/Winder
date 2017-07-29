@@ -10,10 +10,12 @@
 #include <util/delay.h>
 #include <stdio.h>
 #include <avr/eeprom.h>
+#include <math.h>
 
 #define LED PB7
 
-#define Step_second_X 100
+#define Step_orotatieX 200
+//#define Step_second_X 100
 #define X_EN   PD7
 #define X_STEP PF0
 #define X_DIR  PF1
@@ -31,9 +33,10 @@
 #else
 	#define Microstepping_X 1
 #endif
-#define Steps_X Step_second_X*Microstepping_X
+//#define Steps_X Step_second_X*Microstepping_X
 
-#define Step_second_Y 100
+#define Step_orotatieY 200
+//#define Step_second_Y 100
 #define Y_EN   PF2
 #define Y_STEP PF6
 #define Y_DIR  PF7
@@ -51,7 +54,7 @@
 #else
 	#define Microstepping_Y 1
 #endif
-#define Steps_Y Step_second_Y*Microstepping_Y
+//#define Steps_Y Step_second_Y*Microstepping_Y
 
 #define Right 0
 #define Left 1
@@ -86,7 +89,13 @@ long int Valoarea_de_numarareX=0, Valoarea_de_numarareY=0;
 volatile unsigned long int Pasi_decrement_X=0, Pasi_decrement_Y=0;
 volatile unsigned char Fanion_RunStep_X=0, Fanion_RunStep_Y=0;
 
-unsigned long int Diametrul_sarmei=0, Lungimea_bobinei=0;
+unsigned long int Nr_impulsuriX=0, Nr_impulsuriY=0;
+
+unsigned long int Lungimea_bobinei=0, Nr_spire=0;
+double Diametrul_sarmei=0, Coef_deplasare=0, Viteza=0;
+unsigned long int Nr_fire_pestrat=0, Nr_straturi=0;
+
+unsigned long int Steps_X=0, Steps_Y=0;	//nr de pasi pe secunda, viteza
 
 void Start_timer0()
 {
@@ -321,6 +330,144 @@ void USART_putstring_hardware(char* StringPtr)
 	}
 }
 
+void Parametri_de_intrare()
+{
+		sprintf(Transmite_buf, "Helllo\n\n");
+		USART_putstring_hardware(Transmite_buf);
+		PORTB ^= 1<<LED;
+		
+		unsigned char flag=0, contor_cifre=0;
+		unsigned long int Diametrul_sarmei_parteaintreaga=0;
+		sprintf(Transmite_buf, "Diametrul sarmei in mm? \n");
+		USART_putstring_hardware(Transmite_buf);
+		while(fanion_asteapta_raspuns==0)
+			{
+				while(Receive_C>0)
+					{
+						if(Receive_buf[Receive_R] == '.')
+							flag=1;
+					
+						if(flag==0)
+							Diametrul_sarmei_parteaintreaga = ((Diametrul_sarmei_parteaintreaga*10) + (Receive_buf[Receive_R]-0x30));
+					
+						if(Receive_buf[Receive_R] != '.' && flag==1)
+							{
+								Diametrul_sarmei = ((Diametrul_sarmei*10) + (Receive_buf[Receive_R]-0x30));
+								contor_cifre++;
+							}
+						Receive_R++;
+						Receive_C--;
+					}
+			}
+		while(contor_cifre>0)
+			{
+				Diametrul_sarmei = Diametrul_sarmei/10;
+				contor_cifre--;	
+			}
+		Diametrul_sarmei = Diametrul_sarmei_parteaintreaga + Diametrul_sarmei;
+		fanion_asteapta_raspuns=0;
+		sprintf(Transmite_buf, "Diametrul sarmei este %.6f mm \n", Diametrul_sarmei);
+		USART_putstring_hardware(Transmite_buf);
+		
+		sprintf(Transmite_buf, "Lungimea bobinei mm?\n");
+		USART_putstring_hardware(Transmite_buf);
+		while(fanion_asteapta_raspuns==0)
+			{
+				while(Receive_C>0)
+				{
+					Lungimea_bobinei = ((Lungimea_bobinei*10) + (Receive_buf[Receive_R]-0x30));
+					Receive_R++;
+					Receive_C--;
+				}
+			}
+		fanion_asteapta_raspuns=0;
+		sprintf(Transmite_buf, "Lungimea bobinei este %lu mm \n", Lungimea_bobinei);
+		USART_putstring_hardware(Transmite_buf);
+		
+		sprintf(Transmite_buf, "Numarul de spire?\n");
+		USART_putstring_hardware(Transmite_buf);
+		while(fanion_asteapta_raspuns==0)
+			{
+				while(Receive_C>0)
+					{
+						Nr_spire = ((Nr_spire*10) + (Receive_buf[Receive_R]-0x30));
+						Receive_R++;
+						Receive_C--;
+					}
+			}
+		fanion_asteapta_raspuns=0;
+		sprintf(Transmite_buf, "Numarul de spire este %lu \n", Nr_spire);
+		USART_putstring_hardware(Transmite_buf);
+		
+		flag=0;
+		contor_cifre=0;
+		unsigned long int Coef_deplasare_parteaintreaga=0;
+		sprintf(Transmite_buf, "Coeficientul de deplasare?\n");
+		USART_putstring_hardware(Transmite_buf);
+		while(fanion_asteapta_raspuns==0)
+				{
+					while(Receive_C>0)
+						{
+							if(Receive_buf[Receive_R] == '.')
+								flag=1;
+						
+							if(flag==0)
+								Coef_deplasare_parteaintreaga = ((Coef_deplasare_parteaintreaga*10) + (Receive_buf[Receive_R]-0x30));
+						
+							if(Receive_buf[Receive_R] != '.' && flag==1)
+								{
+									Coef_deplasare = ((Coef_deplasare*10) + (Receive_buf[Receive_R]-0x30));
+									contor_cifre++;
+								}
+							Receive_R++;
+							Receive_C--;
+						}
+				}
+		while(contor_cifre>0)
+			{
+				Coef_deplasare = Coef_deplasare/10;
+				contor_cifre--;
+			}
+		Coef_deplasare = Coef_deplasare_parteaintreaga + Coef_deplasare;
+		fanion_asteapta_raspuns=0;
+		sprintf(Transmite_buf, "Coeficientul de deplasare este %.6f \n", Coef_deplasare);
+		USART_putstring_hardware(Transmite_buf);
+		
+		
+		flag=0;
+		contor_cifre=0;
+		unsigned long int Viteza_parteaintreaga=0;
+		sprintf(Transmite_buf, "Viteza, nr de bobinari pe secunda?\n");
+		USART_putstring_hardware(Transmite_buf);
+		while(fanion_asteapta_raspuns==0)
+		{
+			while(Receive_C>0)
+				{
+					if(Receive_buf[Receive_R] == '.')
+						flag=1;
+				
+					if(flag==0)
+						Viteza_parteaintreaga = ((Viteza_parteaintreaga*10) + (Receive_buf[Receive_R]-0x30));
+				
+					if(Receive_buf[Receive_R] != '.' && flag==1)
+						{
+							Viteza = ((Viteza*10) + (Receive_buf[Receive_R]-0x30));
+							contor_cifre++;
+						}
+					Receive_R++;
+					Receive_C--;
+				}
+		}
+		while(contor_cifre>0)
+		{
+			Viteza = Viteza/10;
+			contor_cifre--;
+		}
+		Viteza = Viteza_parteaintreaga + Viteza;
+		fanion_asteapta_raspuns=0;
+		sprintf(Transmite_buf, "Nr de bobinari pe secunda este %.6f mm\n", Viteza);
+		USART_putstring_hardware(Transmite_buf);
+}
 
 int main(void)
 {
@@ -642,44 +789,31 @@ int main(void)
 	///RunSpeed(X_STEP, Left);
 	RunStep(Y_STEP, Left, 100*2);
 	
-	
-	
 	sei();
 	
-	sprintf(Transmite_buf, "Hello\n\n");
-	USART_putstring_hardware(Transmite_buf);
-	PORTB ^= 1<<LED;
+	Parametri_de_intrare();
 	
-	sprintf(Transmite_buf, "Diametrul sarmei in mm:?\n");
-	USART_putstring_hardware(Transmite_buf);
-	while(fanion_asteapta_raspuns==0)
-		{
-			while(Receive_C>0)
-				{
-					Diametrul_sarmei = ((Diametrul_sarmei*10) + (Receive_buf[Receive_R]-0x30));
-					Receive_R++;
-					Receive_C--;
-				}
-		}
-	fanion_asteapta_raspuns=0;
-	sprintf(Transmite_buf, "Diametrul sarmei este %lu mm\n", Diametrul_sarmei);
-	USART_putstring_hardware(Transmite_buf);
+	Nr_fire_pestrat = ceil(Lungimea_bobinei/Diametrul_sarmei);
+	Nr_straturi = ceil((Nr_spire*Diametrul_sarmei)/Lungimea_bobinei);
+	Nr_impulsuriX=Step_orotatieX*Microstepping_X*2;		//inmultirea la 2 deoarece o perioada de timp impulsul este in 1 si alta perioada in 0, in taimer decrementez si la 0 si la 1, de aceea trebuie numarul de pasi si inmultim la 2 
+	Nr_impulsuriY=((Step_orotatieY/Coef_deplasare))*Diametrul_sarmei*Microstepping_Y*2;
 	
-	sprintf(Transmite_buf, "Lungimea bobinei mm:?\n");
-	USART_putstring_hardware(Transmite_buf);
-	while(fanion_asteapta_raspuns==0)
-		{
-			while(Receive_C>0)
-				{
-					Lungimea_bobinei = ((Lungimea_bobinei*10) + (Receive_buf[Receive_R]-0x30));
-					Receive_R++;
-					Receive_C--;
-				}
-		}
-	fanion_asteapta_raspuns=0;
-	sprintf(Transmite_buf, "Lungimea bobinei este %lu mm\n", Lungimea_bobinei);
-	USART_putstring_hardware(Transmite_buf);
 
+	Steps_X = Step_orotatieX * Microstepping_X * Viteza * 2; // inmultirea cu 2 deoarece sunt 2 motoare si se necesita timp pentru a bobina un coil apoi a misca, timpul la ambele motoare este egal, pe viitor sar putea face ca motorul Y sa se deplaseze mai rapid deoarece are putine impulsuri iar X mai lent.
+	Steps_Y = Step_orotatieY * Microstepping_Y * Viteza * 2;
+	
+	sprintf(Transmite_buf, "Nr de fire pe strat %lu \n", Nr_fire_pestrat);
+	USART_putstring_hardware(Transmite_buf);
+	sprintf(Transmite_buf, "Nr de straturi %lu \n", Nr_straturi);
+	USART_putstring_hardware(Transmite_buf);
+	sprintf(Transmite_buf, "Nr de impulsuri pe X %lu \n", Nr_impulsuriX);
+	USART_putstring_hardware(Transmite_buf);
+	sprintf(Transmite_buf, "Nr de impulsuri pe Y %lu \n", Nr_impulsuriY);
+	USART_putstring_hardware(Transmite_buf);
+	sprintf(Transmite_buf, "Nr de impulsuri pe secunda X %lu \n", Steps_X);
+	USART_putstring_hardware(Transmite_buf);
+	sprintf(Transmite_buf, "Nr de impulsuri pe secunda Y %lu \n", Steps_Y);
+	USART_putstring_hardware(Transmite_buf);
 	
     while (1) 
 		{
