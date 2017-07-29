@@ -11,6 +11,51 @@
 #include <stdio.h>
 #include <avr/eeprom.h>
 
+#define LED PB7
+
+#define Step_second_X 100
+#define X_EN   PD7
+#define X_STEP PF0
+#define X_DIR  PF1
+#define MS1_X 0
+#define MS2_X 0
+#define MS3_X 0
+#if (MS1_X == 1 && MS2_X == 1 && MS3_X == 1)
+	#define Microstepping_X 16
+#elif (MS1_X == 1 && MS2_X == 1 && MS3_X == 0)
+	#define Microstepping_X 8
+#elif (MS1_X == 0 && MS2_X == 1 && MS3_X == 0)
+	#define Microstepping_X 4
+#elif (MS1_X == 1 && MS2_X == 0 && MS3_X == 0)
+	#define Microstepping_X 2
+#else
+	#define Microstepping_X 1
+#endif
+#define Steps_X Step_second_X*Microstepping_X
+
+#define Step_second_Y 100
+#define Y_EN   PF2
+#define Y_STEP PF6
+#define Y_DIR  PF7
+#define MS1_Y 0
+#define MS2_Y 0
+#define MS3_Y 0
+#if (MS1_Y == 1 && MS2_Y == 1 && MS3_Y == 1)
+	#define Microstepping_Y 16
+#elif (MS1_Y == 1 && MS2_Y == 1 && MS3_Y == 0)
+	#define Microstepping_Y 8
+#elif (MS1_Y == 0 && MS2_Y == 1 && MS3_Y == 0)
+	#define Microstepping_Y 4
+#elif (MS1_Y == 1 && MS2_Y == 0 && MS3_Y == 0)
+	#define Microstepping_Y 2
+#else
+	#define Microstepping_Y 1
+#endif
+#define Steps_Y Step_second_Y*Microstepping_Y
+
+#define Right 0
+#define Left 1
+
 uint8_t V1 EEMEM;
 uint8_t V2 EEMEM;
 uint8_t V3 EEMEM;
@@ -26,13 +71,233 @@ uint8_t V12 EEMEM;
 uint8_t V13 EEMEM;
 uint8_t V14 EEMEM;
 uint8_t V15 EEMEM;
-
 uint8_t date=0;
 
 volatile char Receive_buf[256];
 char Transmite_buf[256];								
 volatile uint8_t Receive_W = 0, Receive_C = 0;						
 uint8_t Receive_R = 0, Transmite_T = 0;
+volatile unsigned char fanion_asteapta_raspuns=0;
+
+volatile uint8_t fanion_x=0, fanion_y=0;
+volatile unsigned char Overflow_timer11=0, Overflow_timer12=0, Overflow_timer31=0, Overflow_timer32=0;
+long int Valoarea_de_numarareX=0, Valoarea_de_numarareY=0;
+
+volatile unsigned long int Pasi_decrement_X=0, Pasi_decrement_Y=0;
+volatile unsigned char Fanion_RunStep_X=0, Fanion_RunStep_Y=0;
+
+unsigned long int Diametrul_sarmei=0, Lungimea_bobinei=0;
+
+void Start_timer0()
+{
+	// Timer/Counter 0 initialization
+	// Clock source: System Clock
+	// Clock value: 15.625 kHz
+	// Mode: Normal top=0xFF
+	// OC0A output: Disconnected
+	// OC0B output: Disconnected
+	// Timer Period: 16.384 ms
+	TCCR0B=(0<<WGM02) | (1<<CS02) | (0<<CS01) | (1<<CS00);
+	TCNT0=0x00;
+	// Timer/Counter 0 Interrupt(s) initialization
+	TIMSK0=(0<<OCIE0B) | (0<<OCIE0A) | (1<<TOIE0);
+}
+
+void Stop_timer0()
+{
+	// Timer/Counter 0 stop
+	TCCR0B=(0<<WGM02) | (0<<CS02) | (0<<CS01) | (0<<CS00);
+}
+
+void Off_timer1()
+{
+	// Timer/Counter 1 initialization
+	// Clock source: System Clock
+	// Clock value: 2000.000 kHz
+	// Mode: Normal top=0xFFFF
+	// OC1A output: Disconnected
+	// OC1B output: Disconnected
+	// OC1C output: Disconnected
+	// Noise Canceler: Off
+	// Input Capture on Falling Edge
+	// Timer Period: 32.768 ms
+	// Timer1 Overflow Interrupt: Off
+	// Input Capture Interrupt: Off
+	// Compare A Match Interrupt: On
+	// Compare B Match Interrupt: Off
+	// Compare C Match Interrupt: Off
+	TCCR1A=(0<<COM1A1) | (0<<COM1A0) | (0<<COM1B1) | (0<<COM1B0) | (0<<COM1C1) | (0<<COM1C0) | (0<<WGM11) | (0<<WGM10);
+	TCCR1B=(0<<ICNC1) | (0<<ICES1) | (0<<WGM13) | (0<<WGM12) | (0<<CS12) | (0<<CS11) | (0<<CS10);
+	TCNT1H=0x00;
+	TCNT1L=0x00;
+	ICR1H=0x00;
+	ICR1L=0x00;
+	OCR1AH=0x00;
+	OCR1AL=0x00;
+	OCR1BH=0x00;
+	OCR1BL=0x00;
+	OCR1CH=0x00;
+	OCR1CL=0x00;
+	// Timer/Counter 1 Interrupt(s) initialization
+	TIMSK1=(0<<ICIE1) | (0<<OCIE1C) | (0<<OCIE1B) | (1<<OCIE1A) | (0<<TOIE1);
+}
+
+void Set_timer1()
+{
+	// Timer/Counter 1 initialization
+	// Clock source: System Clock
+	// Clock value: 2000.000 kHz
+	// Mode: Normal top=0xFFFF
+	// OC1A output: Disconnected
+	// OC1B output: Disconnected
+	// OC1C output: Disconnected
+	// Noise Canceler: Off
+	// Input Capture on Falling Edge
+	// Timer Period: 32.768 ms
+	// Timer1 Overflow Interrupt: Off
+	// Input Capture Interrupt: Off
+	// Compare A Match Interrupt: On
+	// Compare B Match Interrupt: Off
+	// Compare C Match Interrupt: Off
+	TCCR1A=(0<<COM1A1) | (0<<COM1A0) | (0<<COM1B1) | (0<<COM1B0) | (0<<COM1C1) | (0<<COM1C0) | (0<<WGM11) | (0<<WGM10);
+	TCCR1B=(0<<ICNC1) | (0<<ICES1) | (0<<WGM13) | (0<<WGM12) | (0<<CS12) | (1<<CS11) | (0<<CS10);
+	TCNT1H=0x00;
+	TCNT1L=0x00;
+	ICR1H=0x00;
+	ICR1L=0x00;
+	OCR1BH=0x00;
+	OCR1BL=0x00;
+	OCR1CH=0x00;
+	OCR1CL=0x00;
+	// Timer/Counter 1 Interrupt(s) initialization
+	TIMSK1=(0<<ICIE1) | (0<<OCIE1C) | (0<<OCIE1B) | (1<<OCIE1A) | (0<<TOIE1);
+}
+
+void Off_timer3()
+{
+	// Timer/Counter 3 initialization
+	// Clock source: System Clock
+	// Clock value: 2000.000 kHz
+	// Mode: Normal top=0xFFFF
+	// OC3A output: Disconnected
+	// OC3B output: Disconnected
+	// OC3C output: Disconnected
+	// Noise Canceler: Off
+	// Input Capture on Falling Edge
+	// Timer Period: 32.768 ms
+	// Timer3 Overflow Interrupt: Off
+	// Input Capture Interrupt: Off
+	// Compare A Match Interrupt: On
+	// Compare B Match Interrupt: Off
+	// Compare C Match Interrupt: Off
+	TCCR3A=(0<<COM3A1) | (0<<COM3A0) | (0<<COM3B1) | (0<<COM3B0) | (0<<COM3C1) | (0<<COM3C0) | (0<<WGM31) | (0<<WGM30);
+	TCCR3B=(0<<ICNC3) | (0<<ICES3) | (0<<WGM33) | (0<<WGM32) | (0<<CS32) | (0<<CS31) | (0<<CS30);
+	TCNT3H=0x00;
+	TCNT3L=0x00;
+	ICR3H=0x00;
+	ICR3L=0x00;
+	OCR3AH=0x00;
+	OCR3AL=0x00;
+	OCR3BH=0x00;
+	OCR3BL=0x00;
+	OCR3CH=0x00;
+	OCR3CL=0x00;
+	
+	// Timer/Counter 3 Interrupt(s) initialization
+	TIMSK3=(0<<ICIE3) | (0<<OCIE3C) | (0<<OCIE3B) | (1<<OCIE3A) | (0<<TOIE3);	
+}
+
+void Set_timer3()
+{
+	// Timer/Counter 3 initialization
+	// Clock source: System Clock
+	// Clock value: 2000.000 kHz
+	// Mode: Normal top=0xFFFF
+	// OC3A output: Disconnected
+	// OC3B output: Disconnected
+	// OC3C output: Disconnected
+	// Noise Canceler: Off
+	// Input Capture on Falling Edge
+	// Timer Period: 32.768 ms
+	// Timer3 Overflow Interrupt: Off
+	// Input Capture Interrupt: Off
+	// Compare A Match Interrupt: On
+	// Compare B Match Interrupt: Off
+	// Compare C Match Interrupt: Off
+	TCCR3A=(0<<COM3A1) | (0<<COM3A0) | (0<<COM3B1) | (0<<COM3B0) | (0<<COM3C1) | (0<<COM3C0) | (0<<WGM31) | (0<<WGM30);
+	TCCR3B=(0<<ICNC3) | (0<<ICES3) | (0<<WGM33) | (0<<WGM32) | (0<<CS32) | (1<<CS31) | (0<<CS30);
+	TCNT3H=0x00;
+	TCNT3L=0x00;
+	ICR3H=0x00;
+	ICR3L=0x00;
+	OCR3BH=0x00;
+	OCR3BL=0x00;
+	OCR3CH=0x00;
+	OCR3CL=0x00;
+	
+	// Timer/Counter 3 Interrupt(s) initialization
+	TIMSK3=(0<<ICIE3) | (0<<OCIE3C) | (0<<OCIE3B) | (1<<OCIE3A) | (0<<TOIE3);
+}
+
+void Stepper_setup_X(unsigned long int nr_impulsuri)
+{
+Valoarea_de_numarareX = 2000000/(nr_impulsuri*2);	//2000000 - frecventa de tactare a timerului, nu am facuto prin defined, este setata la clk/8=16000000/8=2000000;
+while((Valoarea_de_numarareX-65536)>0)
+	{
+		Overflow_timer11++;
+		Valoarea_de_numarareX -= 65536;
+	}
+if(Overflow_timer11==0)
+	OCR1A = Valoarea_de_numarareX;
+else
+	OCR1A = 0xFFFF;	
+Overflow_timer12=Overflow_timer11;	
+Set_timer1();	
+}
+
+void Stepper_setup_Y(unsigned long int nr_impulsuri)
+{
+Valoarea_de_numarareY = 2000000/(nr_impulsuri*2);	//2000000 - frecventa de tactare a timerului, nu am facuto prin defined, este setata la clk/8=16000000/8=2000000;
+while((Valoarea_de_numarareY-65536)>0)
+	{
+		Overflow_timer31++;
+		Valoarea_de_numarareY -= 65536;
+	}
+if(Overflow_timer31==0)
+	OCR3A = Valoarea_de_numarareY;
+else
+	OCR3A = 0xFFFF;
+Overflow_timer32=Overflow_timer31;
+Set_timer3();	
+}
+
+void Enable_stepper(unsigned char Motor_Enable)
+{
+	Motor_Enable == PD7 ? PORTD &= ~(1 << Motor_Enable) : PORTF &= ~(1 << Motor_Enable);
+	//_delay_us(5);
+}
+void Disable_stepper(unsigned char Motor_Disable)
+{
+	Motor_Disable == PD7 ? PORTD |= (1 << Motor_Disable) : PORTF |= (1 << Motor_Disable);
+	//_delay_us(5);
+}
+void Setdir_stepper(unsigned char Motor, unsigned char Direction)
+{
+	Direction > 0 ? PORTF |= (1 << Motor) : PORTF &= ~(1 << Motor);			// scriem pe axa X dar poate fi utilizata si pe axa y deoarece directia pinilor la ambele se afla pe un port portul F
+	//_delay_us(5);
+}
+void RunSpeed(unsigned char Motor, unsigned char Direction)
+{
+	Motor == PF0 ? Setdir_stepper(X_DIR, Direction) : Setdir_stepper(Y_DIR, Direction); 
+	Motor == PF0 ? Stepper_setup_X(Steps_X) : Stepper_setup_Y(Steps_Y);
+}
+void RunStep(unsigned char Motor, unsigned char Direction, unsigned long int Steps)
+{
+	RunSpeed(Motor, Direction);
+	Motor == PF0 ? Pasi_decrement_X=Steps : Pasi_decrement_Y=Steps;
+	Motor == PF0 ? Fanion_RunStep_X=1 : Fanion_RunStep_Y=1;
+}
+
 
 /************************* Nu utilizez, voi folosi UART_hardware receptie prin intrerupere *************************/
 unsigned char USART_receive_hardware(void)
@@ -40,16 +305,12 @@ unsigned char USART_receive_hardware(void)
 	while(!(UCSR0A & (1<<RXC0)));
 	return UDR0;
 }
-
-
 /************************* Transmiterea unui byte UART_hardware *************************/
 void USART_send_hardware(unsigned char data)
 {
 	while(!(UCSR0A & (1<<UDRE0)));
 	UDR0 = data;
 }
-
-
 /************************* Transmiterea unui sir de caractere UART_hardware *************************/
 void USART_putstring_hardware(char* StringPtr)
 {
@@ -59,6 +320,7 @@ void USART_putstring_hardware(char* StringPtr)
 		StringPtr++;
 	}
 }
+
 
 int main(void)
 {
@@ -372,15 +634,56 @@ int main(void)
 	// TWI disabled
 	TWCR=(0<<TWEA) | (0<<TWSTA) | (0<<TWSTO) | (0<<TWEN) | (0<<TWIE);
 	
+	Enable_stepper(X_EN);
+	//RunSpeed(X_STEP, Left);
+	RunStep(X_STEP, Right, 200*2);	//inmultirea la 2 deoarece o perioada de timp impulsul este in 1 si alta perioada in 0, in taimer decrementez si la 0 si la 1, de aceea trebuie numarul de pasi si inmultim la 2
+	
+	Enable_stepper(Y_EN);
+	///RunSpeed(X_STEP, Left);
+	RunStep(Y_STEP, Left, 100*2);
+	
+	
+	
 	sei();
+	
+	sprintf(Transmite_buf, "Hello\n\n");
+	USART_putstring_hardware(Transmite_buf);
+	PORTB ^= 1<<LED;
+	
+	sprintf(Transmite_buf, "Diametrul sarmei in mm:?\n");
+	USART_putstring_hardware(Transmite_buf);
+	while(fanion_asteapta_raspuns==0)
+		{
+			while(Receive_C>0)
+				{
+					Diametrul_sarmei = ((Diametrul_sarmei*10) + (Receive_buf[Receive_R]-0x30));
+					Receive_R++;
+					Receive_C--;
+				}
+		}
+	fanion_asteapta_raspuns=0;
+	sprintf(Transmite_buf, "Diametrul sarmei este %lu mm\n", Diametrul_sarmei);
+	USART_putstring_hardware(Transmite_buf);
+	
+	sprintf(Transmite_buf, "Lungimea bobinei mm:?\n");
+	USART_putstring_hardware(Transmite_buf);
+	while(fanion_asteapta_raspuns==0)
+		{
+			while(Receive_C>0)
+				{
+					Lungimea_bobinei = ((Lungimea_bobinei*10) + (Receive_buf[Receive_R]-0x30));
+					Receive_R++;
+					Receive_C--;
+				}
+		}
+	fanion_asteapta_raspuns=0;
+	sprintf(Transmite_buf, "Lungimea bobinei este %lu mm\n", Lungimea_bobinei);
+	USART_putstring_hardware(Transmite_buf);
+
 	
     while (1) 
 		{
-			_delay_ms(1000);
-			sprintf(Transmite_buf, "Hello\n");
-			USART_send_hardware(date);
-			USART_putstring_hardware(Transmite_buf);
-			PORTB^=(1<<PB7);
+			//_delay_ms(1000);
 			while(Receive_C>0)
 				{
 					Transmite_buf[Transmite_T]=Receive_buf[Receive_R];
@@ -391,6 +694,7 @@ int main(void)
 			Transmite_buf[Transmite_T]=0x00;
 			USART_putstring_hardware(Transmite_buf);
 			Transmite_T=0;
+			_delay_us(1);
 		}
 }
 
@@ -399,4 +703,109 @@ ISR(USART0_RX_vect)
 Receive_buf[Receive_W] = UDR0;	
 Receive_W++;							// pregatirea adresei pentru urmatorul byte ce va veni in port
 Receive_C++;
+Start_timer0();
+}
+
+ISR(TIMER1_COMPA_vect)
+{
+	if(Overflow_timer11 != 0)
+		{
+			Overflow_timer11--;	
+		}
+	if(Overflow_timer11==0)
+		{	
+			if(Overflow_timer12 !=0)
+				{
+					OCR1A = Valoarea_de_numarareX;
+					fanion_x++;
+					if(fanion_x==2)
+						{
+							fanion_x=0;
+							OCR1A=0xFFFF;
+							Overflow_timer11=Overflow_timer12;
+							if(Fanion_RunStep_X==1)
+								{
+									Pasi_decrement_X--;
+									if(Pasi_decrement_X==0)
+										{
+											Fanion_RunStep_X=0;
+											Off_timer1();
+											Disable_stepper(X_EN);
+										}
+								}
+							PORTF ^= (1 << X_STEP);
+						}
+				}
+			else
+				{
+					if(Fanion_RunStep_X==1)
+						{
+							Pasi_decrement_X--;
+							if(Pasi_decrement_X==0)
+								{
+									Fanion_RunStep_X=0;
+									Off_timer1();
+									Disable_stepper(X_EN);
+								}
+						}
+					PORTF ^= (1 << X_STEP);
+				}
+		}
+	TCNT1H=0x00;
+	TCNT1L=0x00;	
+}
+
+ISR(TIMER3_COMPA_vect)
+{
+	if(Overflow_timer31 != 0)
+	{
+		Overflow_timer31--;
+	}
+	if(Overflow_timer31==0)
+	{
+		if(Overflow_timer32 !=0)
+		{
+			OCR3A = Valoarea_de_numarareY;
+			fanion_y++;
+			if(fanion_y==2)
+			{
+				fanion_y=0;
+				OCR3A=0xFFFF;
+				Overflow_timer31=Overflow_timer32;
+				if(Fanion_RunStep_Y==1)
+				{
+					Pasi_decrement_Y--;
+					if(Pasi_decrement_Y==0)
+					{
+						Fanion_RunStep_Y=0;
+						Off_timer3();
+						Disable_stepper(Y_EN);
+					}
+				}
+				PORTF ^= (1 << Y_STEP);
+			}
+		}
+		else
+		{
+			if(Fanion_RunStep_Y==1)
+			{
+				Pasi_decrement_Y--;
+				if(Pasi_decrement_Y==0)
+				{
+					Fanion_RunStep_Y=0;
+					Off_timer3();
+					Disable_stepper(Y_EN);
+				}
+			}
+			PORTF ^= (1 << Y_STEP);
+		}
+	}
+	TCNT3H=0x00;
+	TCNT3L=0x00;
+}
+
+ISR(TIMER0_OVF_vect)
+{
+fanion_asteapta_raspuns=1;
+Stop_timer0();	
 }
