@@ -56,8 +56,11 @@
 #endif
 //#define Steps_Y Step_second_Y*Microstepping_Y
 
-#define Right 0
-#define Left 1
+#define RightX 0
+#define LeftX 1
+
+#define RightY 0
+#define LeftY 1
 
 uint8_t V1 EEMEM;
 uint8_t V2 EEMEM;
@@ -781,15 +784,9 @@ int main(void)
 	// TWI disabled
 	TWCR=(0<<TWEA) | (0<<TWSTA) | (0<<TWSTO) | (0<<TWEN) | (0<<TWIE);
 	
-	Enable_stepper(X_EN);
-	//RunSpeed(X_STEP, Left);
-	RunStep(X_STEP, Right, 200*2);	//inmultirea la 2 deoarece o perioada de timp impulsul este in 1 si alta perioada in 0, in taimer decrementez si la 0 si la 1, de aceea trebuie numarul de pasi si inmultim la 2
-	
-	Enable_stepper(Y_EN);
-	///RunSpeed(X_STEP, Left);
-	RunStep(Y_STEP, Left, 100*2);
-	
 	sei();
+	Disable_stepper(X_EN);	//pentru ca motoarele sa nu consume curent
+	Disable_stepper(Y_EN);
 	
 	Parametri_de_intrare();
 	
@@ -814,6 +811,14 @@ int main(void)
 	USART_putstring_hardware(Transmite_buf);
 	sprintf(Transmite_buf, "Nr de impulsuri pe secunda Y %lu \n", Steps_Y);
 	USART_putstring_hardware(Transmite_buf);
+	
+		Enable_stepper(X_EN);
+		//RunSpeed(X_STEP, Left);
+		RunStep(X_STEP, RightX, Nr_impulsuriX);	//inmultirea la 2 deoarece o perioada de timp impulsul este in 1 si alta perioada in 0, in taimer decrementez si la 0 si la 1, de aceea trebuie numarul de pasi si inmultim la 2
+		
+		Enable_stepper(Y_EN);
+		///RunSpeed(X_STEP, Left);
+		RunStep(Y_STEP, RightX, Nr_impulsuriY);
 	
     while (1) 
 		{
