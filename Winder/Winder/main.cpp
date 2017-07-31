@@ -58,7 +58,7 @@
 
 #define RightX 0
 #define LeftX 1
-
+unsigned char directia=0;
 #define RightY 0
 #define LeftY 1
 
@@ -791,6 +791,9 @@ int main(void)
 	Parametri_de_intrare();
 	
 	Nr_fire_pestrat = ceil(Lungimea_bobinei/Diametrul_sarmei);
+	unsigned long int Nr_fire_pestrat2=0;
+	Nr_fire_pestrat2=Nr_fire_pestrat;
+	
 	Nr_straturi = ceil((Nr_spire*Diametrul_sarmei)/Lungimea_bobinei);
 	Nr_impulsuriX=Step_orotatieX*Microstepping_X*2;		//inmultirea la 2 deoarece o perioada de timp impulsul este in 1 si alta perioada in 0, in taimer decrementez si la 0 si la 1, de aceea trebuie numarul de pasi si inmultim la 2 
 	Nr_impulsuriY=((Step_orotatieY/Coef_deplasare))*Diametrul_sarmei*Microstepping_Y*2;
@@ -812,18 +815,12 @@ int main(void)
 	sprintf(Transmite_buf, "Nr de impulsuri pe secunda Y %lu \n", Steps_Y);
 	USART_putstring_hardware(Transmite_buf);
 	
-		Enable_stepper(X_EN);
-		//RunSpeed(X_STEP, Left);
-		RunStep(X_STEP, RightX, Nr_impulsuriX);	//inmultirea la 2 deoarece o perioada de timp impulsul este in 1 si alta perioada in 0, in taimer decrementez si la 0 si la 1, de aceea trebuie numarul de pasi si inmultim la 2
-		
-		Enable_stepper(Y_EN);
-		///RunSpeed(X_STEP, Left);
-		RunStep(Y_STEP, RightX, Nr_impulsuriY);
+	unsigned char fanion_start=0;
 	
     while (1) 
 		{
 			//_delay_ms(1000);
-			while(Receive_C>0)
+			/*while(Receive_C>0)
 				{
 					Transmite_buf[Transmite_T]=Receive_buf[Receive_R];
 					Receive_R++;
@@ -833,7 +830,62 @@ int main(void)
 			Transmite_buf[Transmite_T]=0x00;
 			USART_putstring_hardware(Transmite_buf);
 			Transmite_T=0;
-			_delay_us(1);
+			_delay_us(1);*/
+			
+					//Enable_stepper(X_EN);
+					//RunSpeed(X_STEP, Left);
+					//RunStep(X_STEP, RightX, Nr_impulsuriX);	//inmultirea la 2 deoarece o perioada de timp impulsul este in 1 si alta perioada in 0, in taimer decrementez si la 0 si la 1, de aceea trebuie numarul de pasi si inmultim la 2
+					
+					//Enable_stepper(Y_EN);
+					///RunSpeed(X_STEP, Left);
+				//	RunStep(Y_STEP, RightX, Nr_impulsuriY);
+			
+			if(fanion_start==0)	
+			{sprintf(Transmite_buf, "Start\n\n");
+			USART_putstring_hardware(Transmite_buf);
+			Enable_stepper(X_EN);
+			Enable_stepper(Y_EN);
+			directia=RightY;
+			while(Nr_straturi>0)
+				{
+					sprintf(Transmite_buf, "Nr_straturi = %lu!\n", Nr_straturi);
+					USART_putstring_hardware(Transmite_buf);
+					while(Nr_fire_pestrat2>0)
+						{
+							sprintf(Transmite_buf, "Nr_fire = %lu!\n", Nr_fire_pestrat2);
+							USART_putstring_hardware(Transmite_buf);
+							RunStep(X_STEP, RightX, Nr_impulsuriX);
+							while(Fanion_RunStep_X !=0)
+								{
+									//_delay_us(1);
+								}
+							_delay_ms(1);
+								
+							RunStep(Y_STEP, directia, Nr_impulsuriY);
+							while(Fanion_RunStep_Y !=0)
+								{
+									//_delay_us(1);
+								}
+							_delay_ms(1);
+							
+							Nr_fire_pestrat2--;
+							//_delay_ms(10);
+						}
+					if(directia==RightY)
+						directia=LeftY;
+					else
+						directia=RightY;	
+					Nr_fire_pestrat2=Nr_fire_pestrat;
+					Nr_straturi--;
+
+				}
+			Disable_stepper(X_EN);
+			Disable_stepper(Y_EN);
+			sprintf(Transmite_buf, "END !\n");
+			USART_putstring_hardware(Transmite_buf);
+			fanion_start=1;
+			}
+			_delay_ms(100);
 		}
 }
 
@@ -869,7 +921,7 @@ ISR(TIMER1_COMPA_vect)
 										{
 											Fanion_RunStep_X=0;
 											Off_timer1();
-											Disable_stepper(X_EN);
+											//Disable_stepper(X_EN);
 										}
 								}
 							PORTF ^= (1 << X_STEP);
@@ -884,7 +936,7 @@ ISR(TIMER1_COMPA_vect)
 								{
 									Fanion_RunStep_X=0;
 									Off_timer1();
-									Disable_stepper(X_EN);
+									//Disable_stepper(X_EN);
 								}
 						}
 					PORTF ^= (1 << X_STEP);
@@ -918,7 +970,7 @@ ISR(TIMER3_COMPA_vect)
 					{
 						Fanion_RunStep_Y=0;
 						Off_timer3();
-						Disable_stepper(Y_EN);
+						//Disable_stepper(Y_EN);
 					}
 				}
 				PORTF ^= (1 << Y_STEP);
@@ -933,7 +985,7 @@ ISR(TIMER3_COMPA_vect)
 				{
 					Fanion_RunStep_Y=0;
 					Off_timer3();
-					Disable_stepper(Y_EN);
+					//Disable_stepper(Y_EN);
 				}
 			}
 			PORTF ^= (1 << Y_STEP);
